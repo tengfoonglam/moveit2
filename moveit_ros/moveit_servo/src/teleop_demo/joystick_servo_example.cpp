@@ -164,7 +164,7 @@ public:
     : Node("joy_to_twist_publisher", options), frame_to_publish_(BASE_FRAME_ID)
   {
     // Declare Parameters
-    declare_parameter("attach_end_effector_object", true);
+    declare_parameter("attach_end_effector_object", false);
 
     // Setup pub/sub
     joy_sub_ = this->create_subscription<sensor_msgs::msg::Joy>(

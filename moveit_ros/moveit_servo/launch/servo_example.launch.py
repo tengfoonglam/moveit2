@@ -1,6 +1,8 @@
 import os
 import yaml
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import ComposableNodeContainer
@@ -33,6 +35,10 @@ def load_yaml(package_name, file_path):
 
 
 def generate_launch_description():
+    attach_end_effector_object = LaunchConfiguration(
+        "attach_end_effector_object", default="false"
+    )
+
     moveit_config = (
         MoveItConfigsBuilder("moveit_resources_panda")
         .robot_description(file_path="config/panda.urdf.xacro")
@@ -125,6 +131,7 @@ def generate_launch_description():
                 package="moveit_servo",
                 plugin="moveit_servo::JoyToServoPub",
                 name="controller_to_servo_node",
+                parameters=[{"attach_end_effector_object": attach_end_effector_object}],
             ),
             ComposableNode(
                 package="joy",
@@ -150,6 +157,11 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "attach_end_effector_object",
+                default_value="false",
+                description="If true, attaches a box to the end effector",
+            ),
             rviz_node,
             ros2_control_node,
             joint_state_broadcaster_spawner,
