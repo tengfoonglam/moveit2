@@ -163,6 +163,9 @@ public:
   JoyToServoPub(const rclcpp::NodeOptions& options)
     : Node("joy_to_twist_publisher", options), frame_to_publish_(BASE_FRAME_ID)
   {
+    // Declare Parameters
+    declare_parameter("attach_end_effector_object", true);
+
     // Setup pub/sub
     joy_sub_ = this->create_subscription<sensor_msgs::msg::Joy>(
         JOY_TOPIC, rclcpp::SystemDefaultsQoS(),
@@ -181,6 +184,9 @@ public:
     // Load the collision scene asynchronously
     collision_pub_thread_ = std::thread([this]() {
       rclcpp::sleep_for(std::chrono::seconds(3));
+
+      auto ps = std::make_unique<moveit_msgs::msg::PlanningScene>();
+
       // Create collision object, in the way of servoing
       moveit_msgs::msg::CollisionObject collision_object;
       collision_object.header.frame_id = "panda_link0";
@@ -213,7 +219,15 @@ public:
       moveit_msgs::msg::PlanningSceneWorld psw;
       psw.collision_objects.push_back(collision_object);
 
-      auto ps = std::make_unique<moveit_msgs::msg::PlanningScene>();
+      // If desired, add a box added to the end effector to test collisions between scene objects and attached objects
+      if (get_parameter("attach_end_effector_object").as_bool())
+      {
+        moveit_msgs::msg::RobotState robot_state;
+        robot_state.is_diff = true;
+        robot_state.attached_collision_objects.push_back(createAttachedCollisionBox());
+        ps->robot_state = robot_state;
+      }
+
       ps->world = psw;
       ps->is_diff = true;
       collision_pub_->publish(std::move(ps));
@@ -224,6 +238,35 @@ public:
   {
     if (collision_pub_thread_.joinable())
       collision_pub_thread_.join();
+  }
+
+  static moveit_msgs::msg::AttachedCollisionObject createAttachedCollisionBox()
+  {
+    moveit_msgs::msg::CollisionObject end_effector_collision_object;
+    end_effector_collision_object.header.frame_id = "panda_hand";
+    end_effector_collision_object.id = "attached_end_effector_box";
+    end_effector_collision_object.operation = end_effector_collision_object.ADD;
+
+    shape_msgs::msg::SolidPrimitive end_effector_box;
+    end_effector_box.type = end_effector_box.BOX;
+    end_effector_box.dimensions = { 0.1, 0.1, 0.1 };
+
+    geometry_msgs::msg::Pose end_effector_box_pose;
+    end_effector_box_pose.position.x = 0.0;
+    end_effector_box_pose.position.y = 0.0;
+    end_effector_box_pose.position.z = 0.15;
+
+    end_effector_collision_object.primitives.push_back(end_effector_box);
+    end_effector_collision_object.primitive_poses.push_back(end_effector_box_pose);
+
+    moveit_msgs::msg::AttachedCollisionObject attached_object;
+
+    attached_object.link_name = "panda_hand";
+    attached_object.object = end_effector_collision_object;
+    attached_object.object.id = "attached_box";
+    attached_object.touch_links = { "panda_link8", "panda_leftfinger", "panda_rightfinger" };
+
+    return attached_object;
   }
 
   void joyCB(const sensor_msgs::msg::Joy::ConstSharedPtr& msg)
