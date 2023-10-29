@@ -54,6 +54,7 @@ CollisionCheck::CollisionCheck(const rclcpp::Node::SharedPtr& node, const ServoP
   : node_(node)
   , parameters_(parameters)
   , planning_scene_monitor_(planning_scene_monitor)
+  , current_state_(getLockedPlanningSceneRO()->getCurrentState())
   , self_velocity_scale_coefficient_(-log(0.001) / parameters->self_collision_proximity_threshold)
   , scene_velocity_scale_coefficient_(-log(0.001) / parameters->scene_collision_proximity_threshold)
   , period_(1. / parameters->collision_check_rate)
@@ -73,8 +74,6 @@ CollisionCheck::CollisionCheck(const rclcpp::Node::SharedPtr& node, const ServoP
   // ROS pubs/subs
   collision_velocity_scale_pub_ =
       node_->create_publisher<std_msgs::msg::Float64>("~/collision_velocity_scale", rclcpp::SystemDefaultsQoS());
-
-  current_state_ = planning_scene_monitor_->getStateMonitor()->getCurrentState();
 }
 
 planning_scene_monitor::LockedPlanningSceneRO CollisionCheck::getLockedPlanningSceneRO() const
@@ -95,14 +94,14 @@ void CollisionCheck::run()
   }
 
   // Update to the latest current state
-  current_state_ = planning_scene_monitor_->getStateMonitor()->getCurrentState();
-  current_state_->updateCollisionBodyTransforms();
+  current_state_ = getLockedPlanningSceneRO()->getCurrentState();
+  current_state_.updateCollisionBodyTransforms();
   collision_detected_ = false;
 
   // Do a timer-safe distance-based collision detection
   collision_result_.clear();
   getLockedPlanningSceneRO()->getCollisionEnv()->checkRobotCollision(collision_request_, collision_result_,
-                                                                     *current_state_);
+                                                                     current_state_);
   scene_collision_distance_ = collision_result_.distance;
   collision_detected_ |= collision_result_.collision;
   collision_result_.print();
@@ -110,7 +109,7 @@ void CollisionCheck::run()
   collision_result_.clear();
   // Self-collisions and scene collisions are checked separately so different thresholds can be used
   getLockedPlanningSceneRO()->getCollisionEnvUnpadded()->checkSelfCollision(
-      collision_request_, collision_result_, *current_state_, getLockedPlanningSceneRO()->getAllowedCollisionMatrix());
+      collision_request_, collision_result_, current_state_, getLockedPlanningSceneRO()->getAllowedCollisionMatrix());
   self_collision_distance_ = collision_result_.distance;
   collision_detected_ |= collision_result_.collision;
   collision_result_.print();
